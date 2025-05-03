@@ -122,11 +122,11 @@ def feature(input_data, swinging_now, swinging_times, n_fft, a_fft, g_fft, a_fft
 
     #var = [math.sqrt((var[feature_index] / len(input_data))) for feature_index in range(len(input_data[i]))]
     #rms = [math.sqrt((rms[feature_index] / len(input_data))) for feature_index in range(len(input_data[i]))]
-    var = [0 for _ in range(len(input_data[i]))]
-    rms = [0 for _ in range(len(input_data[i]))]
+    var = [0.0 for _ in range(len(input_data[i]))]
+    rms = [0.0 for _ in range(len(input_data[i]))]
     for feature_index in range(len(input_data[i])):
         v = var[feature_index] / len(input_data)
-        r = var[feature_index] / len(input_data)
+        r = rms[feature_index] / len(input_data)
         if v > 0:
             var[feature_index] = math.sqrt(v)
 
