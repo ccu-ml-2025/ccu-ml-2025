@@ -6,194 +6,14 @@ import csv
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, make_scorer
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, PredefinedSplit
+from sklearn.model_selection import StratifiedGroupKFold
 
 import joblib
 import sys
-
-def FFT(xreal, ximag):
-    n = 2
-    while(n*2 <= len(xreal)):
-        n *= 2
-
-    p = int(math.log(n, 2))
-
-    for i in range(0, n):
-        a = i
-        b = 0
-        for j in range(0, p):
-            b = int(b*2 + a%2)
-            a = a/2
-        if(b > i):
-            xreal[i], xreal[b] = xreal[b], xreal[i]
-            ximag[i], ximag[b] = ximag[b], ximag[i]
-
-    wreal = []
-    wimag = []
-
-    arg = float(-2 * math.pi / n)
-    treal = float(math.cos(arg))
-    timag = float(math.sin(arg))
-
-    wreal.append(float(1.0))
-    wimag.append(float(0.0))
-
-    for j in range(1, int(n/2)):
-        wreal.append(wreal[-1] * treal - wimag[-1] * timag)
-        wimag.append(wreal[-1] * timag + wimag[-1] * treal)
-
-    m = 2
-    while(m < n + 1):
-        for k in range(0, n, m):
-            for j in range(0, int(m/2), 1):
-                index1 = k + j
-                index2 = int(index1 + m / 2)
-                t = int(n * j / m)
-                treal = wreal[t] * xreal[index2] - wimag[t] * ximag[index2]
-                timag = wreal[t] * ximag[index2] + wimag[t] * xreal[index2]
-                ureal = xreal[index1]
-                uimag = ximag[index1]
-                xreal[index1] = ureal + treal
-                ximag[index1] = uimag + timag
-                xreal[index2] = ureal - treal
-                ximag[index2] = uimag - timag
-        m *= 2
-
-    return n, xreal, ximag
-
-def FFT_data(input_data, swinging_times):
-    txtlength = swinging_times[-1] - swinging_times[0]
-    a_mean = [0] * txtlength
-    g_mean = [0] * txtlength
-
-    for num in range(len(swinging_times)-1):
-        a = []
-        g = []
-        for swing in range(swinging_times[num], swinging_times[num+1]):
-            a.append(math.sqrt(math.pow((input_data[swing][0] + input_data[swing][1] + input_data[swing][2]), 2)))
-            g.append(math.sqrt(math.pow((input_data[swing][3] + input_data[swing][4] + input_data[swing][5]), 2)))
-
-        a_mean[num] = (sum(a) / len(a))
-        g_mean[num] = (sum(a) / len(a))
-
-    return a_mean, g_mean
-
-def feature(input_data, swinging_now, swinging_times, n_fft, a_fft, g_fft, a_fft_imag, g_fft_imag, writer):
-    allsum = []
-    mean = []
-    var = []
-    rms = []
-    XYZmean_a = 0
-    a = []
-    g = []
-    a_s1 = 0
-    a_s2 = 0
-    g_s1 = 0
-    g_s2 = 0
-    a_k1 = 0
-    a_k2 = 0
-    g_k1 = 0
-    g_k2 = 0
-
-    for i in range(len(input_data)):
-        if i==0:
-            allsum = input_data[i]
-            a.append(math.sqrt(math.pow((input_data[i][0] + input_data[i][1] + input_data[i][2]), 2)))
-            g.append(math.sqrt(math.pow((input_data[i][3] + input_data[i][4] + input_data[i][5]), 2)))
-            continue
-
-        a.append(math.sqrt(math.pow((input_data[i][0] + input_data[i][1] + input_data[i][2]), 2)))
-        g.append(math.sqrt(math.pow((input_data[i][3] + input_data[i][4] + input_data[i][5]), 2)))
-
-        allsum = [allsum[feature_index] + input_data[i][feature_index] for feature_index in range(len(input_data[i]))]
-
-    mean = [allsum[feature_index] / len(input_data) for feature_index in range(len(input_data[i]))]
-
-    for i in range(len(input_data)):
-        if i==0:
-            var = input_data[i]
-            rms = input_data[i]
-            continue
-
-        var = [var[feature_index] + math.pow((input_data[i][feature_index] - mean[feature_index]), 2) for feature_index in range(len(input_data[i]))]
-        rms = [rms[feature_index] + math.pow(input_data[i][feature_index], 2) for feature_index in range(len(input_data[i]))]
-
-    var = [math.sqrt((var[feature_index] / len(input_data))) for feature_index in range(len(input_data[i]))]
-    rms = [math.sqrt((rms[feature_index] / len(input_data))) for feature_index in range(len(input_data[i]))]
-
-    a_max = [max(a)]
-    a_min = [min(a)]
-    a_mean = [sum(a) / len(a)]
-    g_max = [max(g)]
-    g_min = [min(g)]
-    g_mean = [sum(g) / len(g)]
-
-    a_var = math.sqrt(math.pow((var[0] + var[1] + var[2]), 2))
-
-    for i in range(len(input_data)):
-        a_s1 = a_s1 + math.pow((a[i] - a_mean[0]), 4)
-        a_s2 = a_s2 + math.pow((a[i] - a_mean[0]), 2)
-        g_s1 = g_s1 + math.pow((g[i] - g_mean[0]), 4)
-        g_s2 = g_s2 + math.pow((g[i] - g_mean[0]), 2)
-        a_k1 = a_k1 + math.pow((a[i] - a_mean[0]), 3)
-        g_k1 = g_k1 + math.pow((g[i] - g_mean[0]), 3)
-
-    a_s1 = a_s1 / len(input_data)
-    a_s2 = a_s2 / len(input_data)
-    g_s1 = g_s1 / len(input_data)
-    g_s2 = g_s2 / len(input_data)
-    a_k2 = math.pow(a_s2, 1.5)
-    g_k2 = math.pow(g_s2, 1.5)
-    a_s2 = a_s2 * a_s2
-    g_s2 = g_s2 * g_s2
-
-    a_kurtosis = [a_s1 / a_s2]
-    g_kurtosis = [g_s1 / g_s2]
-    a_skewness = [a_k1 / a_k2]
-    g_skewness = [g_k1 / g_k2]
-
-    a_fft_mean = 0
-    g_fft_mean = 0
-    cut = int(n_fft / swinging_times)
-    a_psd = []
-    g_psd = []
-    entropy_a = []
-    entropy_g = []
-    e1 = []
-    e3 = []
-    e2 = 0
-    e4 = 0
-
-    for i in range(cut * swinging_now, cut * (swinging_now + 1)):
-        a_fft_mean += a_fft[i]
-        g_fft_mean += g_fft[i]
-        a_psd.append(math.pow(a_fft[i], 2) + math.pow(a_fft_imag[i], 2))
-        g_psd.append(math.pow(g_fft[i], 2) + math.pow(g_fft_imag[i], 2))
-        e1.append(math.pow(a_psd[-1], 0.5))
-        e3.append(math.pow(g_psd[-1], 0.5))
-
-    a_fft_mean = a_fft_mean / cut
-    g_fft_mean = g_fft_mean / cut
-
-    a_psd_mean = sum(a_psd) / len(a_psd)
-    g_psd_mean = sum(g_psd) / len(g_psd)
-
-    for i in range(cut):
-        e2 += math.pow(a_psd[i], 0.5)
-        e4 += math.pow(g_psd[i], 0.5)
-
-    for i in range(cut):
-        entropy_a.append((e1[i] / e2) * math.log(e1[i] / e2))
-        entropy_g.append((e3[i] / e4) * math.log(e3[i] / e4))
-
-    a_entropy_mean = sum(entropy_a) / len(entropy_a)
-    g_entropy_mean = sum(entropy_g) / len(entropy_g)
-
-
-    output = mean + var + rms + a_max + a_mean + a_min + g_max + g_mean + g_min + [a_fft_mean] + [g_fft_mean] + [a_psd_mean] + [g_psd_mean] + a_kurtosis + g_kurtosis + a_skewness + g_skewness + [a_entropy_mean] + [g_entropy_mean]
-    writer.writerow(output)
+from preprocess import *
 
 def data_generate():
     datapath = './train_data'
@@ -220,34 +40,26 @@ def data_generate():
 
         f.close()
 
-        swing_index = np.linspace(0, len(All_data), 28, dtype = int)
-        # filename.append(int(Path(file).stem))
-        # all_swing.append([swing_index])
-
+        swing_index = np.linspace(0, len(All_data), 28, dtype=int)
         headerList = ['ax_mean', 'ay_mean', 'az_mean', 'gx_mean', 'gy_mean', 'gz_mean', 'ax_var', 'ay_var', 'az_var', 'gx_var', 'gy_var', 'gz_var', 'ax_rms', 'ay_rms', 'az_rms', 'gx_rms', 'gy_rms', 'gz_rms', 'a_max', 'a_mean', 'a_min', 'g_max', 'g_mean', 'g_min', 'a_fft', 'g_fft', 'a_psd', 'g_psd', 'a_kurt', 'g_kurt', 'a_skewn', 'g_skewn', 'a_entropy', 'g_entropy']
-
 
         with open('./{dir}/{fname}.csv'.format(dir = tar_dir, fname = Path(file).stem), 'w', newline = '') as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(headerList)
-            try:
-                a_fft, g_fft = FFT_data(All_data, swing_index)
-                a_fft_imag = [0] * len(a_fft)
-                g_fft_imag = [0] * len(g_fft)
-                n_fft, a_fft, a_fft_imag = FFT(a_fft, a_fft_imag)
-                n_fft, g_fft, g_fft_imag = FFT(g_fft, g_fft_imag)
-                for i in range(len(swing_index)):
-                    if i==0:
-                        continue
-                    feature(All_data[swing_index[i-1]: swing_index[i]], i - 1, len(swing_index) - 1, n_fft, a_fft, g_fft, a_fft_imag, g_fft_imag, writer)
-            except:
-                print(Path(file).stem)
-                continue
+            a_fft, g_fft = FFT_data(All_data, swing_index)
+            a_fft_imag = [0] * len(a_fft)
+            g_fft_imag = [0] * len(g_fft)
+            n_fft, a_fft, a_fft_imag = FFT(a_fft, a_fft_imag)
+            n_fft, g_fft, g_fft_imag = FFT(g_fft, g_fft_imag)
+            for i in range(len(swing_index)):
+                if i==0:
+                    continue
+                feature(All_data[swing_index[i-1]: swing_index[i]], i - 1, len(swing_index) - 1, n_fft, a_fft, g_fft, a_fft_imag, g_fft_imag, writer)
 
 
 def main():
     # 若尚未產生特徵，請先執行 data_generate() 生成特徵 CSV 檔案
-    # data_generate()
+    data_generate()
 
     # 讀取訓練資訊，根據 player_id 將資料分成 80% 訓練、20% 測試
     info = pd.read_csv('train_info.csv')
@@ -291,96 +103,107 @@ def main():
     final_scores = [0 for _ in range(4)]
     current_idx = 0
 
-    def model_binary(X_train, y_train, X_test, y_test):
-        #clf = RandomForestClassifier(random_state=42)
-        #clf.fit(X_train, y_train)
-        tmpclf = KNeighborsClassifier()
-        params = {
-            'n_neighbors' : [_ for _ in range(1, 20)],
-            'metric': ['euclidean', 'manhattan']
-        }
-        grid = GridSearchCV(
-            estimator = tmpclf,
-            param_grid = params,
-            cv = 5,
-            scoring = 'accuracy',
-            n_jobs = -1,
-            verbose = 2
-        )
-
-        X_pool = np.concatenate([X_train, X_test], axis=0)
-        Y_pool = np.concatenate([y_train, y_test], axis=0)
-        grid.fit(X_pool, Y_pool)
-        clf = grid.best_estimator_
-
-        predicted = clf.predict_proba(X_test)
-        # 取出正類（index 0）的概率
-        predicted = [predicted[i][0] for i in range(len(predicted))]
-
-
-        num_groups = len(predicted) // group_size
-        if sum(predicted[:group_size]) / group_size > 0.5:
-            y_pred = [max(predicted[i*group_size: (i+1)*group_size]) for i in range(num_groups)]
-        else:
-            y_pred = [min(predicted[i*group_size: (i+1)*group_size]) for i in range(num_groups)]
-
-        y_pred  = [1 - x for x in y_pred]
-        y_test_agg = [y_test[i*group_size] for i in range(num_groups)]
-
-        auc_score = roc_auc_score(y_test_agg, y_pred, average='micro')
-        nonlocal current_idx
-        final_scores[current_idx] = auc_score
-
-        # save model into outfile
-        joblib.dump(clf, '../model-{}.m'.format(current_idx))
-
-        current_idx += 1
-
-    # 定義多類別分類評分函數 (例如 play years、level)
-    def model_multiary(X_train, y_train, X_test, y_test):
-        #clf = RandomForestClassifier(random_state=42)
-        #clf.fit(X_train, y_train)
-        tmpclf = KNeighborsClassifier()
-        params = {
-            'n_neighbors' : [_ for _ in range(1, 20)],
-            'metric': ['euclidean', 'manhattan']
-        }
-        grid = GridSearchCV(
-            estimator = tmpclf,
-            param_grid = params,
-            cv = 5,
-            scoring = 'accuracy',
-            n_jobs = -1,
-            verbose = 2
-        )
-
-        X_pool = np.concatenate([X_train, X_test], axis=0)
-        Y_pool = np.concatenate([y_train, y_test], axis=0)
-        grid.fit(X_pool, Y_pool)
-        clf = grid.best_estimator_
-        predicted = clf.predict_proba(X_test)
-        num_groups = len(predicted) // group_size
+    def binary_group_auc(y_test, predicted):
+        eps=1e-7
+        predicted = predicted[:, 1]
+        logit = np.log(np.clip(predicted, eps, 1 - eps) / np.clip(1 - predicted, eps, 1 - eps))
+        num_groups = len(logit) // group_size
         y_pred = []
         for i in range(num_groups):
-            group_pred = predicted[i*group_size: (i+1)*group_size]
-            num_classes = len(np.unique(y_train))
-            # 對每個類別計算該組內的總機率
-            class_sums = [sum([group_pred[k][j] for k in range(group_size)]) for j in range(num_classes)]
-            chosen_class = np.argmax(class_sums)
-            candidate_probs = [group_pred[k][chosen_class] for k in range(group_size)]
-            best_instance = np.argmax(candidate_probs)
-            y_pred.append(group_pred[best_instance])
+            gp = logit[i*group_size : (i+1)*group_size]
+            cur = np.mean(gp)
+            y_pred.append(1/(1 + np.exp(-cur)))
 
-        y_test_agg = [y_test[i*group_size] for i in range(num_groups)]
-        auc_score = roc_auc_score(y_test_agg, y_pred, average='micro', multi_class='ovr')
+        y_test_agg = y_test[::group_size][:num_groups]
+        auc_score = roc_auc_score(y_test_agg, y_pred, average='micro')
+        return auc_score
+
+    def binary_group_scorer(estimator, X, y_true):
+        y_pred = estimator.predict_proba(X)
+        return binary_group_auc(y_true, y_pred)
+
+    def model_binary(X_train, y_train, X_test, y_test):
+        # merge training set & valid set
+        X_pool = np.vstack((X_train, X_test))
+        Y_pool = np.concatenate((y_train, y_test))
+        # tell PredefinedSplit where to train(-1) and valid(0)
+        n_train, n_test = len(X_train), len(X_test)
+        test_fold = np.concatenate([np.full(n_train, -1, dtype=int), np.zeros(n_test, dtype=int)])
+        cv = PredefinedSplit(test_fold)
+
+        params = {
+            'n_neighbors' : list(range(1, 55, 2)),
+            'metric': ['euclidean', 'manhattan']
+        }
+        grid = GridSearchCV(
+            estimator = KNeighborsClassifier(),
+            param_grid = params,
+            cv = cv, # Use pre-defined split (8:2)
+            scoring = binary_group_scorer,
+            n_jobs = -1,
+            verbose = 2,
+            error_score=np.nan,
+            refit = False # no leak
+        )
+
+        grid.fit(X_pool, Y_pool)
+        best_param = grid.best_params_
+        clf = KNeighborsClassifier(**best_param)
+        clf.fit(X_train, y_train)
+        predicted = clf.predict_proba(X_test)
         nonlocal current_idx
-        final_scores[current_idx] = auc_score
+        final_scores[current_idx] = binary_group_auc(y_test, predicted)
 
         # save model into outfile
         joblib.dump(clf, '../model-{}.m'.format(current_idx))
-
         current_idx += 1
 
+    def multiary_group_auc(y_test, predicted):
+        num_groups = len(predicted) // group_size
+        y_pred = predicted.reshape(num_groups, group_size, -1).mean(axis=1)
+        y_test_agg = y_test[::group_size][:num_groups]
+        auc_score = roc_auc_score(y_test_agg, y_pred, average='micro', multi_class='ovr')
+        return auc_score
+
+    def multiary_group_scorer(estimator, X, y_true):
+        y_pred = estimator.predict_proba(X)
+        return multiary_group_auc(y_true, y_pred)
+
+    def model_multiary(X_train, y_train, X_test, y_test):
+        # merge training set & valid set
+        X_pool = np.vstack((X_train, X_test))
+        Y_pool = np.concatenate((y_train, y_test))
+        # tell PredefinedSplit where to train(-1) and valid(0)
+        n_train, n_test = len(X_train), len(X_test)
+        test_fold = np.concatenate([np.full(n_train, -1, dtype=int), np.zeros(n_test, dtype=int)])
+        cv = PredefinedSplit(test_fold)
+
+        params = {
+            'n_neighbors' : list(range(1, 55, 2)),
+            'metric': ['euclidean', 'manhattan']
+        }
+        grid = GridSearchCV(
+            estimator = KNeighborsClassifier(),
+            param_grid = params,
+            cv = cv, # Use pre-defined split (8:2)
+            scoring = multiary_group_scorer,
+            n_jobs = -1,
+            verbose = 2,
+            error_score=np.nan,
+            refit = False # no leak
+        )
+
+        grid.fit(X_pool, Y_pool)
+        best_param = grid.best_params_
+        clf = KNeighborsClassifier(**best_param)
+        clf.fit(X_train, y_train)
+        predicted = clf.predict_proba(X_test)
+        nonlocal current_idx
+        final_scores[current_idx] = multiary_group_auc(y_test, predicted)
+
+        # save model into outfile
+        joblib.dump(clf, '../model-{}.m'.format(current_idx))
+        current_idx += 1
 
     # 評分：針對各目標進行模型訓練與評分
     y_train_le_gender = le.fit_transform(y_train['gender'])
@@ -403,6 +226,9 @@ def main():
     for i in range(4):
         print('Binary AUC:' if i<2 else 'Multiary AUC:', end=' ')
         print(final_scores[i])
+
+    # save the scaler
+    joblib.dump(scaler, '../scaler.m')
 
 if __name__ == '__main__':
     main()
