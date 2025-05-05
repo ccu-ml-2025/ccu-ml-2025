@@ -1,0 +1,6 @@
+tabular_data_train/
+train_data/
+tabular_data_test/
+test_data/
+__pycache__/
+*.csv

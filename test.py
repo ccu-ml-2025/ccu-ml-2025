@@ -18,7 +18,7 @@ def data_generate():
     tar_dir = 'tabular_data_test'
     pathlist_txt = Path(datapath).glob('**/*.txt')
 
-    
+
     for file in tqdm(pathlist_txt, desc='Generating features'):
         f = open(file)
 
@@ -35,13 +35,13 @@ def data_generate():
                 for i in range(6):
                     tmp_list.append(int(num[i]))
                 All_data.append(tmp_list)
-        
+
         f.close()
 
         swing_index = np.linspace(0, len(All_data), 28, dtype = int)
         # filename.append(int(Path(file).stem))
-        # all_swing.append([swing_index])         
-        
+        # all_swing.append([swing_index])
+
 
         with open('./{dir}/{fname}.csv'.format(dir = tar_dir, fname = Path(file).stem), 'w', newline = '') as csvfile:
             writer = csv.writer(csvfile)
@@ -60,18 +60,18 @@ def data_generate():
             except:
                 print(Path(file).stem)
                 continue
-    
+
 
 def main():
     # 若尚未產生特徵，請先執行 data_generate() 生成特徵 CSV 檔案
-    # data_generate()
-    
+    #data_generate()
+
     submission = pd.read_csv("sample_submission.csv")
     # 讀取訓練資訊，根據 player_id 將資料分成 80% 訓練、20% 測試
     info = pd.read_csv("test_info.csv")
     # unique_players = info['unique_id'].unique()
     # train_players, test_players = train_test_split(unique_players, test_size=0.2, random_state=42)
-    
+
     # 讀取特徵 CSV 檔（位於 "./tabular_data_train"）
     datapath = './tabular_data_test'
     # datalist = list(Path(datapath).glob('**/*.csv'))
@@ -91,7 +91,7 @@ def main():
 
     scaler = load(f'./models/scaler.joblib')
     encoder = load(f'./models/le.joblib')
-    
+
     for target, config in target_info.items():
         pred_matrix = []
         model = load(f'./models/rf_{target}_model.joblib')
@@ -108,14 +108,14 @@ def main():
 
             df = pd.read_csv(data_path)
             X_scaled = scaler.transform(df)
-            
-            
+
+
             if task_type == 'binary':
                 probs = model.predict_proba(X_scaled)
                 avg_prob = np.mean([p[1] for p in probs])  # positive class (e.g., male or right-hand)
                 avg_prob = 1 - avg_prob # reverse prob
                 pred_matrix.append([avg_prob])
-                
+
             else:
                 probs = model.predict_proba(X_scaled)  # shape: (27, num_classes)
                 class_sums = np.sum(probs, axis=0)  # sum over 27 predictions
@@ -139,11 +139,11 @@ def main():
                 pred_matrix.append(aligned_probs)
 
 
-        
+
         assert len(submission) == len(pred_matrix)
         for i, col in enumerate(columns):
             submission[col] = [row[i] for row in pred_matrix]
-    
+
     submission.to_csv("submission.csv", index=False)
     print("✅ 預測完成，已儲存為 submission.csv")
 
