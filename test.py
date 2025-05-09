@@ -64,7 +64,7 @@ def data_generate():
 
 def main():
     # 若尚未產生特徵，請先執行 data_generate() 生成特徵 CSV 檔案
-    #data_generate()
+    data_generate()
 
     submission = pd.read_csv("sample_submission.csv")
     # 讀取訓練資訊，根據 player_id 將資料分成 80% 訓練、20% 測試
