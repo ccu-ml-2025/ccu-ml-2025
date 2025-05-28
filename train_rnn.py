@@ -37,6 +37,24 @@ def random_augment(tensor):
         tensor = add_gaussian_noise(tensor)
     return tensor
 
+def time_shift(tensor, shift_range=10):
+    """
+    時間平移增強 (針對時間軸進行循環平移)
+    :param tensor: shape = (segments, time, channels)
+    :param shift_range: 最多平移多少個時間點
+    :return: 同 shape tensor
+    """
+    segments, time_len, channels = tensor.shape
+    shift = np.random.randint(-shift_range, shift_range + 1)
+    if shift == 0:
+        return tensor
+    return torch.roll(tensor, shifts=shift, dims=1)  # 在 time 軸平移
+
+def combined_augment(tensor):
+    tensor = random_augment(tensor)
+    tensor = time_shift(tensor, shift_range=10)
+    return tensor
+
 
 # ===== Dataset 定義 =====
 class WaveformDataset(Dataset):
@@ -87,17 +105,19 @@ class CNN1DClassifier(nn.Module):
         self.bn1 = nn.BatchNorm1d(64)
         self.conv2 = nn.Conv1d(64, 128, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm1d(128)
-        self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(0.3)  
         self.pool = nn.AdaptiveAvgPool1d(1)
         self.fc = nn.Linear(128, num_classes)
 
     def forward(self, x):
         # x: (batch, 27, 100, 6)
-        x = x.view(x.size(0), x.size(1), -1)  # -> (batch, 27, 600)
-        x = x.transpose(1, 2)  # -> (batch, 600, 27)
-        x = x.transpose(1, 2)  # -> (batch, 27, 600)
-        x = x.transpose(1, 2)  # -> (batch, 600, 27)
-        x = x[:, :6, :]  # just keep 6 channels (reshape bug fix)
+        # x = x.view(x.size(0), x.size(1), -1)  # -> (batch, 27, 600)
+        # x = x.transpose(1, 2)  # -> (batch, 600, 27)
+        # x = x.transpose(1, 2)  # -> (batch, 27, 600)
+        # x = x.transpose(1, 2)  # -> (batch, 600, 27)
+        # x = x[:, :6, :]  # just keep 6 channels (reshape bug fix)
+        x = x.permute(0, 3, 1, 2)  # (B, 6, 27, 100)
+        x = x.reshape(x.size(0), 6, -1)  # (B, 6, 2700) 
         x = torch.relu(self.bn1(self.conv1(x)))
         x = torch.relu(self.bn2(self.conv2(x)))
         x = self.dropout(x)
@@ -105,9 +125,9 @@ class CNN1DClassifier(nn.Module):
         return self.fc(x)
 
 # ===== 主訓練流程 =====
-def train_rnn(data_dir, info_csv, task, num_classes, batch_size=32, num_epochs=15, group="player_id", use_cuda=True, augment=False):
+def train_rnn(data_dir, info_csv, task, num_classes, batch_size=16, num_epochs=15, group="player_id", use_cuda=True, augment=False):
     device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
-    augment_fn = random_augment if augment else None
+    augment_fn = combined_augment if augment else None
 
     df = pd.read_csv(info_csv)
     unique_players = df[group].unique()
@@ -232,6 +252,6 @@ def train_rnn(data_dir, info_csv, task, num_classes, batch_size=32, num_epochs=1
 if __name__ == '__main__':
     target_mask = ['gender', 'hold racket handed', 'play years', 'level']
     # train_rnn("./train_data/", "train_info.csv", task="gender", group="player_id", num_classes=2,use_cuda=True, augment=False)
-    # train_rnn("./train_data/", "train_info.csv", task="hold racket handed", group="mode", num_classes=2,use_cuda=True, augment=False)
-    train_rnn("./train_data/", "train_info.csv", task="play years", group="player_id", num_classes=3,use_cuda=True, augment=True)
-    train_rnn("./train_data/", "train_info.csv", task="level", group="player_id", num_classes=4,use_cuda=True, augment=True)
+    train_rnn("./train_data/", "train_info.csv", task="hold racket handed", group="mode", num_classes=2,use_cuda=True, augment=False)
+    # train_rnn("./train_data/", "train_info.csv", task="play years", group="mode", num_classes=3,use_cuda=True, augment=True)
+    # train_rnn("./train_data/", "train_info.csv", task="level", group="mode", num_classes=4,use_cuda=True, augment=True)
