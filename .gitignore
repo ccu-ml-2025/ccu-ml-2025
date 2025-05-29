@@ -1,0 +1,6 @@
+
+__pycache__
+models/*
+result/
+tabular_data_test/*
+weight/
