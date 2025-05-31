@@ -8,7 +8,7 @@ from joblib import dump #儲存權重與模型
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
-from model import model_binary_knn, model_multiary_knn, model_binary, model_multiary
+from model import model_binary_knn, model_multiary_knn, model_binary, model_multiary, model_binary_xgb, model_multiary_xgb
 
 
 def data_generate():
@@ -109,19 +109,19 @@ def main():
     # 評分：針對各目標進行模型訓練與評分
     y_train_le_gender = le.fit_transform(y_train['gender'])
     y_test_le_gender = le.transform(y_test['gender'])
-    model_binary(X_train_scaled, y_train_le_gender, X_test_scaled, y_test_le_gender, group_size, 'gender')
+    model_binary_xgb(X_train_scaled, y_train_le_gender, X_test_scaled, y_test_le_gender, group_size, 'gender')
     
     y_train_le_hold = le.fit_transform(y_train['hold racket handed'])
     y_test_le_hold = le.transform(y_test['hold racket handed'])
-    model_binary(X_train_scaled, y_train_le_hold, X_test_scaled, y_test_le_hold, group_size, 'hold')
+    model_binary_xgb(X_train_scaled, y_train_le_hold, X_test_scaled, y_test_le_hold, group_size, 'hold')
     
     y_train_le_years = le.fit_transform(y_train['play years'])
     y_test_le_years = le.transform(y_test['play years'])
-    model_multiary(X_train_scaled, y_train_le_years, X_test_scaled, y_test_le_years, group_size, 'years')
+    model_multiary_xgb(X_train_scaled, y_train_le_years, X_test_scaled, y_test_le_years, group_size, 'years')
     
     y_train_le_level = le.fit_transform(y_train['level'])
     y_test_le_level = le.transform(y_test['level'])
-    model_multiary(X_train_scaled, y_train_le_level, X_test_scaled, y_test_le_level, group_size, 'levels')
+    model_multiary_xgb(X_train_scaled, y_train_le_level, X_test_scaled, y_test_le_level, group_size, 'levels')
 
     #AUC SCORE: 0.792(gender) + 0.998(hold) + 0.660(years) + 0.822(levels)
 
