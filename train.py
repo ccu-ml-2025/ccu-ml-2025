@@ -1,68 +1,14 @@
-from features import extract_features, headerList
-from fft_utils import FFT, FFT_data
 from pathlib import Path
-import numpy as np
 import pandas as pd
-import csv
 from joblib import dump #儲存權重與模型
-from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
-from model import model_binary_knn, model_multiary_knn, model_binary, model_multiary, model_binary_xgb, model_multiary_xgb
-
-
-def data_generate():
-    datapath = './train_data'
-    tar_dir = 'tabular_data_train'
-    pathlist_txt = Path(datapath).glob('**/*.txt')
-
-
-    for file in tqdm(pathlist_txt, desc='Generating features'):
-        f = open(file)
-
-        All_data = []
-
-        count = 0
-        for line in f.readlines():
-            if line == '\n' or count == 0:
-                count += 1
-                continue
-            num = line.split(' ')
-            if len(num) > 5:
-                tmp_list = []
-                for i in range(6):
-                    tmp_list.append(int(num[i]))
-                All_data.append(tmp_list)
-
-        f.close()
-
-        swing_index = np.linspace(0, len(All_data), 28, dtype = int)
-        # filename.append(int(Path(file).stem))
-        # all_swing.append([swing_index])
-
-
-        with open('./{dir}/{fname}.csv'.format(dir = tar_dir, fname = Path(file).stem), 'w', newline = '') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(headerList)
-            try:
-                a_fft, g_fft = FFT_data(All_data, swing_index)
-                a_fft_imag = [0] * len(a_fft)
-                g_fft_imag = [0] * len(g_fft)
-                n_fft, a_fft, a_fft_imag = FFT(a_fft, a_fft_imag)
-                n_fft, g_fft, g_fft_imag = FFT(g_fft, g_fft_imag)
-                for i in range(len(swing_index)):
-                    if i==0:
-                        continue
-                    features = extract_features(All_data[swing_index[i-1]: swing_index[i]], i - 1, len(swing_index) - 1, n_fft, a_fft, g_fft, a_fft_imag, g_fft_imag)
-                    writer.writerow(features)
-            except:
-                print(Path(file).stem)
-                continue
-
+from model import model_binary_xgb, model_multiary_xgb
+from features import data_generate
 
 def main():
     # 若尚未產生特徵，請先執行 data_generate() 生成特徵 CSV 檔案
-    #data_generate()
+    data_generate('train')
 
     # 讀取訓練資訊，根據 player_id 將資料分成 80% 訓練、20% 測試
     info = pd.read_csv('train_info.csv')
